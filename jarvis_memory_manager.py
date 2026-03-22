@@ -2,7 +2,35 @@ from abc import ABC, abstractmethod
 import json
 import os
 
+try:
+    import colorama
+    colorama.init(autoreset=True)
+    USE_COLORAMA = True
+except Exception:
+    USE_COLORAMA = False
+
 MEMORY_FILE = "jarvis_memory.json"
+
+
+class Colors:
+    HEADER = "\033[95m"
+    OKBLUE = "\033[94m"
+    OKCYAN = "\033[96m"
+    OKGREEN = "\033[92m"
+    WARNING = "\033[93m"
+    FAIL = "\033[91m"
+    BOLD = "\033[1m"
+    UNDERLINE = "\033[4m"
+    ENDC = "\033[0m"
+
+    @staticmethod
+    def wrap(text: str, code: str) -> str:
+        return f"{code}{text}{Colors.ENDC}"
+
+
+def c(text: str, style: str) -> str:
+    return Colors.wrap(text, style)
+
 
 class MemoryUnit(ABC):
     @abstractmethod
@@ -25,6 +53,7 @@ class MemoryUnit(ABC):
     def set_entries(self, entries: list) -> None:
         pass
 
+
 class ListMemoryUnit(MemoryUnit):
     def __init__(self):
         self.entries = []
@@ -45,6 +74,7 @@ class ListMemoryUnit(MemoryUnit):
     def set_entries(self, entries: list) -> None:
         self.entries = entries
 
+
 class MemoryManager:
     def __init__(self):
         self.memory_units = {
@@ -62,13 +92,13 @@ class MemoryManager:
             self.memory_units[name].store(data)
             self.save_memory_units()
         else:
-            print(f"Memory unit '{name}' does not exist.")
+            print(c(f"Memory unit '{name}' does not exist.", Colors.FAIL))
 
     def load_from_file(self, name: str, query: str) -> str:
         if name in self.memory_units:
             return self.memory_units[name].retrieve(query)
         else:
-            print(f"Memory unit '{name}' does not exist.")
+            print(c(f"Memory unit '{name}' does not exist.", Colors.FAIL))
             return None
 
     def delete_from_file(self, name: str, data: str) -> None:
@@ -76,7 +106,7 @@ class MemoryManager:
             self.memory_units[name].delete(data)
             self.save_memory_units()
         else:
-            print(f"Memory unit '{name}' does not exist.")
+            print(c(f"Memory unit '{name}' does not exist.", Colors.FAIL))
 
     def save_memory_units(self) -> None:
         data = {name: unit.get_entries() for name, unit in self.memory_units.items()}
@@ -92,76 +122,98 @@ class MemoryManager:
                     self.memory_units[name].set_entries(entries)
 
     def summarize_memory(self) -> str:
-        summary = []
+        summary_lines = []
         for name, unit in self.memory_units.items():
             entries = unit.get_entries()
-            summary.append(f"{name.capitalize()}s ({len(entries)}):")
+            header = c(f"{name.capitalize()}s ({len(entries)}):", Colors.HEADER + Colors.BOLD)
+            summary_lines.append(header)
             if entries:
                 for idx, entry in enumerate(entries, 1):
-                    summary.append(f"  {idx}. {entry}")
+                    line = c(f"  {idx}. ", Colors.OKBLUE) + c(entry, Colors.OKGREEN)
+                    summary_lines.append(line)
             else:
-                summary.append("  (none)")
-        return "\n".join(summary)
+                summary_lines.append(c("  (none)", Colors.WARNING))
+        return "\n".join(summary_lines)
+
 
 class JarvisCore:
     def __init__(self):
         self.memory_manager = MemoryManager()
 
     def start(self):
-        print("\n~~~~~~~~~Jarvis System is online! 🤖~~~~~~~~~")
+        start_banner = c("\n~~~~~~~~~Jarvis System is online! 🤖~~~~~~~~~", Colors.OKCYAN + Colors.BOLD)
+        print(start_banner)
         while True:
-            user_input = input("\nUser: ").strip().lower()
-            if user_input.startswith("add note"):
+            try:
+                user_prompt = c("User:", Colors.OKBLUE + Colors.BOLD)
+                user_input = input(f"\n{user_prompt} ").strip()
+            except (EOFError, KeyboardInterrupt):
+                print()
+                print(c("\n~~~~~~~~~Jarvis System is offline! 🤖~~~~~~~~~", Colors.OKCYAN + Colors.BOLD))
+                break
+
+            lowered = user_input.lower().strip()
+            if lowered.startswith("add note"):
                 data = user_input[len("add note"):].strip()
                 self.memory_manager.save_to_file("note", data)
-                print("Note saved 📝")
-            elif user_input.startswith("add reminder"):
+                print(c("Jarvis: ", Colors.OKCYAN) + c("Note saved 📝", Colors.OKGREEN))
+            elif lowered.startswith("add reminder"):
                 data = user_input[len("add reminder"):].strip()
                 self.memory_manager.save_to_file("reminder", data)
-                print("Reminder set ⏰")
-            elif user_input.startswith("add preference"):
+                print(c("Jarvis: ", Colors.OKCYAN) + c("Reminder set ⏰", Colors.OKGREEN))
+            elif lowered.startswith("add preference"):
                 data = user_input[len("add preference"):].strip()
                 self.memory_manager.save_to_file("preference", data)
-                print("Preference updated ⚙️")
-            elif user_input.startswith("find note"):
+                print(c("Jarvis: ", Colors.OKCYAN) + c("Preference updated ⚙️", Colors.OKGREEN))
+            elif lowered.startswith("find note"):
                 query = user_input[len("find note"):].strip()
                 result = self.memory_manager.load_from_file("note", query)
-                print(f"Jarvis: {result if result else 'Note not found.'}")
-            elif user_input.startswith("find reminder"):
+                if result:
+                    print(c("Jarvis: ", Colors.OKCYAN) + c(result, Colors.OKGREEN))
+                else:
+                    print(c("Jarvis: ", Colors.OKCYAN) + c("Note not found.", Colors.WARNING))
+            elif lowered.startswith("find reminder"):
                 query = user_input[len("find reminder"):].strip()
                 result = self.memory_manager.load_from_file("reminder", query)
-                print(f"Jarvis: {result if result else 'Reminder not found.'}")
-            elif user_input.startswith("find preference"):
+                if result:
+                    print(c("Jarvis: ", Colors.OKCYAN) + c(result, Colors.OKGREEN))
+                else:
+                    print(c("Jarvis: ", Colors.OKCYAN) + c("Reminder not found.", Colors.WARNING))
+            elif lowered.startswith("find preference"):
                 query = user_input[len("find preference"):].strip()
                 result = self.memory_manager.load_from_file("preference", query)
-                print(f"Jarvis: {result if result else 'Preference not found.'}")
-            elif user_input.startswith("delete note"):
+                if result:
+                    print(c("Jarvis: ", Colors.OKCYAN) + c(result, Colors.OKGREEN))
+                else:
+                    print(c("Jarvis: ", Colors.OKCYAN) + c("Preference not found.", Colors.WARNING))
+            elif lowered.startswith("delete note"):
                 data = user_input[len("delete note"):].strip()
                 self.memory_manager.delete_from_file("note", data)
-                print("Note deleted 🗑️")
-            elif user_input.startswith("delete reminder"):
+                print(c("Jarvis: ", Colors.OKCYAN) + c("Note deleted 🗑️", Colors.FAIL))
+            elif lowered.startswith("delete reminder"):
                 data = user_input[len("delete reminder"):].strip()
                 self.memory_manager.delete_from_file("reminder", data)
-                print("Reminder deleted 🗑️")
-            elif user_input.startswith("delete preference"):
+                print(c("Jarvis: ", Colors.OKCYAN) + c("Reminder deleted 🗑️", Colors.FAIL))
+            elif lowered.startswith("delete preference"):
                 data = user_input[len("delete preference"):].strip()
                 self.memory_manager.delete_from_file("preference", data)
-                print("Preference deleted 🗑️")
-            elif user_input == "save memory":
+                print(c("Jarvis: ", Colors.OKCYAN) + c("Preference deleted 🗑️", Colors.FAIL))
+            elif lowered == "save memory":
                 self.memory_manager.save_memory_units()
-                print("Jarvis: Memory saved.")
-            elif user_input == "load memory":
+                print(c("Jarvis: Memory saved.", Colors.OKGREEN))
+            elif lowered == "load memory":
                 self.memory_manager.load_memory_units()
-                print("Jarvis: Memory loaded.")
-            elif user_input == "summarize memory":
+                print(c("Jarvis: Memory loaded.", Colors.OKGREEN))
+            elif lowered == "summarize memory":
                 summary = self.memory_manager.summarize_memory()
-                print(f"Jarvis:\n{summary}")
-            elif user_input == "thank you":
-                print("Jarvis: You are welcome!")
-                print("\n~~~~~~~~~Jarvis System is offline! 🤖~~~~~~~~~")
+                print(c("Jarvis:\n", Colors.OKCYAN) + summary)
+            elif lowered == "thank you":
+                print(c("Jarvis: You are welcome!", Colors.OKGREEN))
+                print(c("\n~~~~~~~~~Jarvis System is offline! 🤖~~~~~~~~~", Colors.OKCYAN + Colors.BOLD))
                 break
             else:
-                print("Jarvis: Invalid command.")
+                print(c("Jarvis: Invalid command.", Colors.WARNING))
+
 
 if __name__ == "__main__":
     jarvis = JarvisCore()
